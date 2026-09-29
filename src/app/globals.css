@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Visual identity: an editing-suite "contact sheet". Warm paper, near-black ink,
+  a single vermilion accent used sparingly for actions and active state.
+  Monospace carries timecodes, indices and labels — the language of an editor.
+*/
+:root {
+  --background: 44 29% 95%; /* warm paper */
+  --foreground: 30 9% 13%; /* near-black warm ink */
+  --card: 44 33% 98%; /* a hair lighter than paper */
+  --card-foreground: 30 9% 13%;
+  --muted: 42 18% 90%; /* subtle warm fill */
+  --muted-foreground: 34 7% 40%; /* warm grey text */
+  --primary: 9 72% 47%; /* vermilion */
+  --primary-foreground: 44 33% 97%;
+  --secondary: 42 18% 91%;
+  --secondary-foreground: 30 9% 13%;
+  --accent: 9 72% 47%; /* same single accent */
+  --accent-foreground: 44 33% 97%;
+  --destructive: 2 58% 42%;
+  --destructive-foreground: 44 33% 97%;
+  --border: 40 16% 82%; /* hairline */
+  --input: 40 16% 78%;
+  --ring: 9 72% 47%;
+  --radius: 0.1875rem; /* 3px — restrained, not pill */
+  --ink-panel: 30 10% 11%; /* dark surface for video */
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo,
+    Consolas, monospace;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings are deliberate, not oversized or ultra-bold. */
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+::selection {
+  background: hsl(var(--primary) / 0.18);
+}
+
+a {
+  color: inherit;
+}
+
+/* Focus is visible and functional, not glowy. */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* A small domain detail: a monospace kicker/label utility. */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+/* The "recording" pulse used only next to live status. */
+@keyframes rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+.rec-dot {
+  animation: rec-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rec-dot {
+    animation: none;
+  }
+}

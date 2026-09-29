@@ -1,0 +1,36 @@
+node_modules/
+.next/
+
+# downloaded yt-dlp binary (fetch with `npm run setup:ytdlp`)
+bin/
+out/
+build/
+dist/
+
+# env
+.env
+.env.local
+.env*.local
+
+# prisma / sqlite dev db
+prisma/dev.db
+prisma/dev.db-journal
+*.db
+*.db-journal
+
+# storage (local generated media)
+storage/
+!storage/.gitkeep
+
+# logs / misc
+*.log
+.DS_Store
+.vercel
+.turbo
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# youtube account cookies — sensitive, never commit
+cookies.txt
+*cookies*.txt

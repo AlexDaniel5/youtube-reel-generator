@@ -1,0 +1,106 @@
+// Prisma schema for the YouTube Reels Generator.
+//
+// The runnable dev default is SQLite so the whole flow works without an
+// external database. To use PostgreSQL (as recommended for production):
+//   1. change `provider` below to "postgresql"
+//   2. set DATABASE_URL to a postgres connection string in .env
+//   3. run `npm run db:push`
+// All model definitions below are provider-agnostic (JSON payloads are stored
+// as TEXT strings), so the switch is a one-line change.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  url       String
+  title     String?
+  status    String   @default("queued") // JobStatus of the primary analysis job
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sourceVideo SourceVideo?
+  transcript  Transcript?
+  suggestions ClipSuggestion[]
+  clips       GeneratedClip[]
+  jobs        Job[]
+}
+
+model SourceVideo {
+  id          String  @id @default(cuid())
+  projectId   String  @unique
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  storagePath String // path within the storage provider
+  title       String?
+  durationSec Float
+  width       Int
+  height      Int
+  fps         Float
+  createdAt   DateTime @default(now())
+}
+
+model Transcript {
+  id        String   @id @default(cuid())
+  projectId String   @unique
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  language  String?
+  // JSON-serialized Transcript ({ text, segments, words }).
+  data      String
+  createdAt DateTime @default(now())
+}
+
+model ClipSuggestion {
+  id                String   @id @default(cuid())
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  order             Int      @default(0)
+  startSec          Float
+  endSec            Float
+  title             String
+  hook              String
+  score             Int
+  reason            String
+  transcriptPreview String
+  createdAt         DateTime @default(now())
+
+  clips GeneratedClip[]
+}
+
+model GeneratedClip {
+  id           String          @id @default(cuid())
+  projectId    String
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  suggestionId String?
+  suggestion   ClipSuggestion? @relation(fields: [suggestionId], references: [id], onDelete: SetNull)
+
+  title        String
+  startSec     Float
+  endSec       Float
+  captionStyle String  @default("classic")
+  status       String  @default("queued") // queued | rendering | completed | failed
+  error        String?
+  storagePath  String? // path to the rendered mp4 within the storage provider
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Job {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      String // "analyze" | "render"
+  status    String   @default("queued")
+  stage     String? // human-readable current stage
+  progress  Int      @default(0) // 0-100
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
