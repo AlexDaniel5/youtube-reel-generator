@@ -1,108 +1,109 @@
-import type { ClipSuggestion, Transcript, TranscriptSegment } from "@/types";
+import type { ClipSuggestion, Transcript } from "@/types";
 import type { ClipSelectionOptions, ClipSelectionProvider } from "./types";
+import {
+  buildSentences,
+  dedupeClips,
+  interestScore,
+  refineBoundaries,
+  sliceText,
+  type Sentence,
+} from "./narrative";
 
-const HOOK_WORDS = [
-  "mistake",
-  "secret",
-  "never",
-  "most",
-  "biggest",
-  "how",
-  "why",
-  "stop",
-  "truth",
-  "data",
-  "wish",
-  "surprised",
-  "impossible",
-  "breakthrough",
-  "doubled",
-  "framework",
-  "lesson",
-  "changed",
-  "counterintuitive",
-];
+interface ScoredCandidate {
+  start: number;
+  end: number;
+  score: number;
+  text: string;
+  title: string;
+  hook: string;
+  reason: string;
+  preview: string;
+}
 
 /**
- * Offline, heuristic clip selection. Slides a window over the transcript
- * segments building candidates whose length falls within [min, max] seconds,
- * scores each on hook/interest signals, and returns the best non-overlapping
- * set. Deterministic — good enough to exercise the full flow without an API.
+ * Offline, heuristic clip selection. Rather than sliding a fixed-length window,
+ * it treats each high-interest sentence as a potential *peak*, then uses the
+ * shared narrative engine to snap the clip to a clean start and a satisfying
+ * resolution (peak → conclusion), scoring each candidate on interest + ending
+ * quality + duration fit. Deterministic — good enough to exercise the full flow
+ * without an API, and it now produces clips that actually resolve.
  */
 export class MockClipSelectionProvider implements ClipSelectionProvider {
   readonly name = "mock";
 
   async findClips(
     transcript: Transcript,
-    _durationSec: number,
+    durationSec: number,
     options: ClipSelectionOptions,
   ): Promise<ClipSuggestion[]> {
-    const segs = transcript.segments;
-    if (segs.length === 0) return [];
+    const sentences = buildSentences(transcript);
+    if (sentences.length === 0) return [];
 
-    const candidates: ClipSuggestion[] = [];
+    // Rank sentences by interest; the strongest become peak seeds. We consider
+    // a generous pool so dedupe/overlap filtering has room to work.
+    const seeds = sentences
+      .map((s, i) => ({ i, interest: interestScore(sentences, i) }))
+      .sort((a, b) => b.interest - a.interest)
+      .slice(0, Math.max(options.maxSuggestions * 4, 12));
 
-    for (let i = 0; i < segs.length; i++) {
-      let j = i;
-      // Extend the window until it reaches at least minSeconds.
-      while (j < segs.length && segs[j]!.end - segs[i]!.start < options.minSeconds) j++;
-      // Then keep extending while still within maxSeconds.
-      for (let k = j; k < segs.length; k++) {
-        const start = segs[i]!.start;
-        const end = segs[k]!.end;
-        const len = end - start;
-        if (len < options.minSeconds) continue;
-        if (len > options.maxSeconds) break;
-        const window = segs.slice(i, k + 1);
-        candidates.push(this.buildSuggestion(window, start, end));
-      }
+    const candidates: ScoredCandidate[] = [];
+    for (const seed of seeds) {
+      const cand = this.buildCandidate(sentences, seed.i, seed.interest, durationSec, options);
+      if (cand) candidates.push(cand);
     }
 
-    // Greedy non-overlapping selection by score.
-    candidates.sort((a, b) => b.score - a.score);
-    const chosen: ClipSuggestion[] = [];
-    for (const c of candidates) {
-      if (chosen.length >= options.maxSuggestions) break;
-      const overlaps = chosen.some((x) => c.start < x.end && c.end > x.start);
-      if (!overlaps) chosen.push(c);
-    }
-
-    return chosen.sort((a, b) => a.start - b.start);
+    const chosen = dedupeClips(candidates, options.maxSuggestions);
+    return chosen.map((c) => ({
+      start: c.start,
+      end: c.end,
+      title: c.title,
+      hook: c.hook,
+      score: Math.max(1, Math.min(99, Math.round(c.score))),
+      reason: c.reason,
+      transcriptPreview: c.preview,
+    }));
   }
 
-  private buildSuggestion(
-    window: TranscriptSegment[],
-    start: number,
-    end: number,
-  ): ClipSuggestion {
-    const text = window.map((s) => s.text).join(" ");
-    const lower = text.toLowerCase();
+  private buildCandidate(
+    sentences: Sentence[],
+    peakIdx: number,
+    interest: number,
+    durationSec: number,
+    options: ClipSelectionOptions,
+  ): ScoredCandidate | null {
+    const peak = sentences[peakIdx]!;
+    const refined = refineBoundaries({
+      sentences,
+      roughStart: peak.start,
+      roughEnd: peak.end,
+      peakStart: peak.start,
+      peakEnd: peak.end,
+      minSeconds: options.minSeconds,
+      maxSeconds: options.maxSeconds,
+      durationSec,
+    });
+    if (!refined) return null;
 
-    let score = 40;
-    for (const w of HOOK_WORDS) if (lower.includes(w)) score += 6;
-    if (/\?/.test(text)) score += 8; // contains a question
-    if (/\d/.test(text)) score += 6; // contains a number/statistic
-    const firstWord = window[0]!.text.split(/\s+/)[0]?.toLowerCase() ?? "";
-    if (["here", "the", "this", "most", "stop", "you"].includes(firstWord)) score += 8;
+    const text = sliceText(sentences, refined.startIdx, refined.endIdx);
+    const len = refined.end - refined.start;
 
-    // Prefer punchy ~20s clips (within the 10-30s target range).
-    const len = end - start;
-    const ideal = 20;
-    score -= Math.min(20, Math.abs(len - ideal) * 1.2);
-    score = Math.max(1, Math.min(99, Math.round(score)));
+    // Composite: interest of the peak + how well the clip starts and resolves.
+    const score =
+      45 +
+      Math.min(26, interest) +
+      Math.min(18, refined.endingQuality * 0.3) +
+      Math.min(10, Math.max(-10, refined.startQuality * 0.5));
 
-    const firstSentence = window[0]!.text.trim();
-    const title = this.toTitle(firstSentence);
-    const preview = text.length > 220 ? text.slice(0, 217) + "…" : text;
-
+    const hookSentence = sentences[refined.startIdx]!.text.trim();
     return {
-      start: +start.toFixed(2),
-      end: +end.toFixed(2),
-      title,
-      hook: firstSentence,
+      start: refined.start,
+      end: refined.end,
       score,
-      reason: this.reason(lower, len),
-      transcriptPreview: preview,
+      text,
+      title: this.toTitle(hookSentence),
+      hook: hookSentence,
+      reason: this.reason(refined.endingQuality, refined.endIdx > peakIdx, len),
+      preview: text.length > 220 ? text.slice(0, 217) + "…" : text,
     };
   }
 
@@ -112,12 +113,11 @@ export class MockClipSelectionProvider implements ClipSelectionProvider {
     return words.length > 0 ? words : "Highlight";
   }
 
-  private reason(lower: string, len: number): string {
+  private reason(endingQuality: number, resolvesAfterPeak: boolean, len: number): string {
     const bits: string[] = [];
-    if (HOOK_WORDS.some((w) => lower.includes(w))) bits.push("strong hook");
-    if (/\?/.test(lower)) bits.push("poses a question");
-    if (/\d/.test(lower)) bits.push("includes a concrete number");
-    bits.push("self-contained idea");
+    bits.push(resolvesAfterPeak ? "runs past the peak to a resolution" : "self-contained moment");
+    if (endingQuality >= 30) bits.push("ends on a clean conclusion");
+    else if (endingQuality >= 10) bits.push("ends on a natural pause");
     return `${bits.join(", ")} in a tidy ${Math.round(len)}s window.`;
   }
 }
