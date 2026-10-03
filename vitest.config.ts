@@ -8,5 +8,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Playwright specs live in e2e/ and run via `npm run test:e2e`.
+    exclude: ["e2e/**", "node_modules/**"],
   },
 });

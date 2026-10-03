@@ -34,3 +34,9 @@ next-env.d.ts
 # youtube account cookies — sensitive, never commit
 cookies.txt
 *cookies*.txt
+
+# playwright e2e
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/.e2e-storage/
