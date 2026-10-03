@@ -14,6 +14,14 @@ import type { CaptionStyle } from "@/types";
 
 type Phase = "idle" | "analyzing" | "ready" | "error";
 
+/** Mirror the open project into `?project=<id>` so a reload restores it. */
+function setProjectParam(id: string | null) {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set("project", id);
+  else url.searchParams.delete("project");
+  window.history.replaceState(null, "", url);
+}
+
 /** Numbered section header with a hairline rule; the index hangs left on wide screens. */
 function SectionHead({
   index,
@@ -58,6 +66,35 @@ export function ReelsApp() {
     }
   }, []);
 
+  // Restore the project named in the URL (e.g. after a reload).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("project");
+    if (!id) return;
+    let cancelled = false;
+    api
+      .getProject(id)
+      .then((p) => {
+        if (cancelled) return;
+        setProjectId(id);
+        setProject(p);
+        if (p.status === "completed") {
+          setPhase("ready");
+        } else if (p.status === "failed") {
+          setPhase("error");
+          setError(p.error ?? "Analysis failed.");
+        } else {
+          setPhase("analyzing");
+        }
+      })
+      .catch(() => {
+        // Unknown or deleted project — fall back to a fresh start.
+        if (!cancelled) setProjectParam(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const shouldPoll =
     phase === "analyzing" ||
     !!project?.clips.some((c) => c.status === "queued" || c.status === "rendering");
@@ -78,7 +115,9 @@ export function ReelsApp() {
     try {
       const { projectId: id } = await api.createProject(url);
       setProjectId(id);
+      setProjectParam(id);
     } catch (e) {
+      setProjectParam(null);
       setPhase("error");
       setError(e instanceof Error ? e.message : "Could not start analysis.");
     }
@@ -124,6 +163,7 @@ export function ReelsApp() {
   }
 
   function reset() {
+    setProjectParam(null);
     setPhase("idle");
     setProjectId(null);
     setProject(null);
