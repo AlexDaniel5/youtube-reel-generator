@@ -37,6 +37,12 @@ export const config = {
     // which avoids the "page needs to be reloaded" error some cookie sessions
     // trigger. Override here if a specific client is needed.
     playerClient: str("YTDLP_PLAYER_CLIENT", ""),
+    // Test-only: video ids the mock provider reports as private, so e2e tests
+    // can exercise the unavailable-video error path offline. Empty by default.
+    mockPrivateVideoIds: str("MOCK_PRIVATE_VIDEO_IDS", "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
   },
   transcription: {
     provider: str("TRANSCRIPTION_PROVIDER", "mock") as TranscriptionProviderName,

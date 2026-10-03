@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { runFfmpeg } from "@/lib/video/ffmpeg";
 import { randomFilename } from "@/utils/fs";
 import { logger } from "@/lib/logger";
+import { errors } from "@/lib/errors";
 import { parseYouTubeUrl } from "./url";
 import type { VideoSource, VideoSourceProvider } from "./types";
 
@@ -18,6 +19,9 @@ import type { VideoSource, VideoSourceProvider } from "./types";
 export class MockVideoSourceProvider implements VideoSourceProvider {
   readonly name = "mock";
 
+  /** Ids to report as private (test-only; see MOCK_PRIVATE_VIDEO_IDS). */
+  constructor(private readonly privateVideoIds: readonly string[] = []) {}
+
   /** Deterministic duration in [70, 160] seconds from the video id. */
   static durationForUrl(url: string): number {
     const { videoId } = parseYouTubeUrl(url);
@@ -27,6 +31,7 @@ export class MockVideoSourceProvider implements VideoSourceProvider {
 
   async getVideo(url: string): Promise<VideoSource> {
     const { videoId } = parseYouTubeUrl(url); // validates the URL first
+    if (this.privateVideoIds.includes(videoId)) throw errors.videoPrivate();
     const duration = MockVideoSourceProvider.durationForUrl(url);
 
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "reel-src-"));

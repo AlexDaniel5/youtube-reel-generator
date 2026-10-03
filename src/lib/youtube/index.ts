@@ -14,7 +14,7 @@ export function getVideoSourceProvider(): VideoSourceProvider {
       });
     case "mock":
     default:
-      return new MockVideoSourceProvider();
+      return new MockVideoSourceProvider(config.videoSource.mockPrivateVideoIds);
   }
 }
 
