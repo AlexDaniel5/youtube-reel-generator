@@ -54,7 +54,8 @@ whole pipeline immediately.
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # next lint
-npm run test        # vitest (url parsing, framing math, caption generation)
+npm run test        # vitest unit tests
+npm run test:e2e    # Playwright end-to-end tests (see Testing)
 npm run build       # production build
 npm run start       # run the production build
 npm run db:studio   # inspect the database
@@ -148,6 +149,11 @@ src/
     http.ts                 JSON success/error envelope
   types/                    shared domain types
   utils/                    formatting, filename sanitisation, path safety
+
+e2e/                        Playwright end-to-end tests
+  pages/                    page objects (HomePage, SuggestionRow, ClipCard)
+  support/                  env, db/storage reset, fixtures, API + media helpers
+  api/                      HTTP-contract tests (jobs, media Range, traversal)
 ```
 
 ### Key abstractions (all swappable via env)
@@ -163,6 +169,131 @@ src/
 
 `classic`, `bold`, `minimal`, `highlight` — rendered as an ASS subtitle track and
 burned in by FFmpeg, sized for the 1080×1920 output and readable on mobile.
+
+---
+
+## Testing
+
+The suite has two layers. They are kept separate on purpose.
+
+| Layer | Tool | Location | What it covers |
+|---|---|---|---|
+| Unit | Vitest | `src/**/*.test.ts` | Pure logic: URL parsing, framing math, caption/VTT generation, clip narrative, storage path safety, the mock provider |
+| End-to-end | Playwright | `e2e/**/*.spec.ts` | Real user flows in Chromium against a production build, plus the HTTP contract of the API |
+
+Vitest only collects `src/**/*.test.ts` and explicitly excludes `e2e/`.
+Playwright only looks in `e2e/`, so neither runner picks up the other's files.
+
+### Running the tests
+
+```bash
+npm run test                      # unit tests
+npx playwright install chromium   # first time only (Linux/WSL also: sudo npx playwright install-deps chromium)
+npm run test:e2e                  # full e2e suite, headless
+npm run test:e2e:ui               # Playwright UI mode (watch, time-travel debugging)
+npm run test:e2e:report           # open the last HTML report
+```
+
+`npm run test:e2e` needs no setup beyond installing the browser. Playwright's
+`webServer` runs these steps:
+
+1. Reset the test database and storage.
+2. Build the app.
+3. Serve the app on port 3100.
+
+It never attaches to an already-running dev server. That server would be using
+`dev.db`.
+
+### Why the e2e suite is deterministic
+
+The suite always runs the offline **mock providers**. It never reads your
+`.env` for this. Every variable the app reads is pinned in
+`e2e/support/env.ts`.
+
+- **Video:** the mock generates a real H.264/AAC test-pattern video with FFmpeg.
+  Its length comes from a hash of the video ID. The test IDs in
+  `e2e/support/urls.ts` all hash to ~70s, so analysis takes seconds.
+- **Transcript and clip suggestions:** the transcript is synthetic and the clip
+  heuristic is deterministic, so the same URL always yields the same
+  suggestions.
+- **Error paths:** the test-only `MOCK_PRIVATE_VIDEO_IDS` setting makes chosen IDs
+  fail exactly as a private YouTube video does. It is empty by default.
+- **Network and keys:** no network access and no API keys are needed.
+
+### Isolation
+
+| Resource | Development | E2E |
+|---|---|---|
+| Database | `prisma/dev.db` | `prisma/e2e.db`, deleted and recreated from the schema before each run, removed afterwards |
+| Media storage | `./storage` | `./.e2e-storage`, wiped before each run, removed afterwards |
+| Server | `:3000` (dev) | `:3100` (production build) |
+
+### What the e2e suite covers
+
+- **Happy path:** submit a URL and watch job progress, then check:
+  - the suggestions list
+  - a clip rendered with a chosen caption style
+  - the in-browser preview: metadata loads and the duration matches
+  - the downloaded MP4: non-empty, has an `ftyp` header, and its duration checked with ffprobe
+- **Editing:** change start/end, title and caption style, re-render, then
+  reload. The UI, the API and the re-rendered file (checked with ffprobe) all
+  reflect the edit. An end time before the start is rejected without a
+  request being sent.
+- **Input validation:** these inputs each show the exact user-facing message
+  and create no project, which is checked against the database:
+  - malformed URLs
+  - non-http schemes
+  - YouTube URLs with no valid video ID
+  - non-YouTube hosts
+
+  Empty and whitespace-only input never sends a request.
+- **Error handling:** a private video shows a clear error. The error survives a
+  reload, and "Start over" resets the form.
+- **API** (Playwright `request` fixture):
+  - Job polling: stages only move forward and progress never goes backwards.
+  - Media Range support: 200, 206 for bounded and open-ended ranges, 416 past
+    the end, and the sanitised `Content-Disposition` header.
+  - Path traversal: attempts using encoded `/`, `\` and double-encoded
+    separators are rejected with a 4xx and leak no file contents.
+
+### Conventions
+
+- **Selectors:** elements are selected by role or label first. A small set of
+  `data-testid`s is used only where an element has no accessible name: the
+  error banner, job progress, suggestion rows and clip card parts. Page objects
+  in `e2e/pages` own all selectors.
+- **No fixed sleeps:** tests use web-first assertions and `expect.poll` on real
+  state (job status, clip status, video `readyState`).
+- **Timeouts:** the default is 30s per test and 10s per assertion. Groups that
+  render video raise their own limit with `test.setTimeout`. There is no single
+  large global timeout.
+- **Serial runs:** jobs run in the server process and FFmpeg is CPU-bound, so
+  the suite uses one worker. Every test creates its own project, so order
+  doesn't matter.
+- **Failure artifacts:** traces, screenshots and video are kept only for failed
+  tests.
+
+### CI
+
+`.github/workflows/ci.yml` runs on every push and pull request, in this order:
+
+1. typecheck
+2. lint
+3. Vitest
+4. Playwright (Chromium)
+
+If the run fails, the HTML report and `test-results/` (traces, screenshots,
+videos) are uploaded as the `playwright-report` artifact. Open a trace with
+`npx playwright show-trace <trace.zip>` or at trace.playwright.dev.
+
+### Not covered by automated tests
+
+- **Real providers:** yt-dlp, Whisper and Claude need network access and keys,
+  and their results are not deterministic.
+- **How burned-in captions look:** the tests check the container and duration,
+  not individual frames.
+- **Other browsers:** Firefox and WebKit are not run yet. The suite is
+  Chromium-only for now.
 
 ---
 
