@@ -19,8 +19,8 @@ prisma/dev.db-journal
 *.db-journal
 
 # storage (local generated media)
-storage/
-!storage/.gitkeep
+/storage/
+!/storage/.gitkeep
 
 # logs / misc
 *.log
