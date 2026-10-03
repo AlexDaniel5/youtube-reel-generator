@@ -18,7 +18,7 @@ export function JobProgress({ job }: { job: JobDto | null }) {
   const progress = job?.progress ?? 5;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div data-testid="job-progress" className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between font-mono text-xs">
         <span className="flex items-center gap-2 uppercase tracking-wider text-foreground">
           <span className="rec-dot inline-block h-1.5 w-1.5 rounded-full bg-primary" />

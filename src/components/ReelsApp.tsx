@@ -214,7 +214,10 @@ export function ReelsApp() {
       </section>
 
       {error && (
-        <div className="mt-8 max-w-2xl border-l-2 border-destructive bg-destructive/[0.05] py-2.5 pl-4 pr-3 text-sm text-foreground">
+        <div
+          data-testid="error-banner"
+          className="mt-8 max-w-2xl border-l-2 border-destructive bg-destructive/[0.05] py-2.5 pl-4 pr-3 text-sm text-foreground"
+        >
           {error}
         </div>
       )}

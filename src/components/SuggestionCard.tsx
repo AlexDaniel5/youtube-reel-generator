@@ -30,6 +30,7 @@ export function SuggestionRow({
 
   return (
     <li
+      data-testid="suggestion-row"
       className={cn(
         "grid grid-cols-[auto_1fr] items-start gap-x-4 gap-y-2 border-b border-border py-4 transition-colors sm:grid-cols-[auto_1fr_auto]",
         selected ? "bg-primary/[0.04]" : "hover:bg-foreground/[0.02]",

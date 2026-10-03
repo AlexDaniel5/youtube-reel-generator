@@ -68,12 +68,13 @@ export function GeneratedClipCard({
   }
 
   return (
-    <div className="flex flex-col">
+    <div data-testid="clip-card" className="flex flex-col">
       {/* The clip itself is the hero. Capped width reads as a contact sheet. */}
       <div className="w-full max-w-[240px] overflow-hidden rounded-sm bg-ink">
         <div className="relative aspect-[9/16] w-full">
           {ready ? (
             <video
+              data-testid="clip-video"
               key={src}
               src={src}
               controls
@@ -100,10 +101,11 @@ export function GeneratedClipCard({
       {/* Metadata + actions */}
       <div className="mt-3 max-w-[240px]">
         <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-          <span>
+          <span data-testid="clip-timecode">
             {formatTimecode(clip.start)}–{formatTimecode(clip.end)}
           </span>
           <span
+            data-testid="clip-status"
             className={cn(
               "flex items-center gap-1.5",
               clip.status === "failed" && "text-destructive",
@@ -123,8 +125,15 @@ export function GeneratedClipCard({
           </span>
         </div>
 
-        <h4 className="mt-1.5 text-sm font-medium leading-snug">{clip.title}</h4>
-        <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{clip.captionStyle}</p>
+        <h4 data-testid="clip-title" className="mt-1.5 text-sm font-medium leading-snug">
+          {clip.title}
+        </h4>
+        <p
+          data-testid="clip-caption-style"
+          className="mt-0.5 font-mono text-[11px] text-muted-foreground"
+        >
+          {clip.captionStyle}
+        </p>
 
         <div className="mt-2.5 flex items-center gap-4">
           {ready && (
